@@ -10,17 +10,22 @@ Created on Sat Jun  4 09:11:30 2022
 # ==============================================================================
 import pandas as pd
 import numpy as np
-# from sklearn.model_selection import train_test_split
-# from collections import Counter
-# from sklearn.impute import SimpleImputer
+from collections import Counter
+from sklearn.impute import SimpleImputer
 # from sklearn.feature_selection import RFE
 import matplotlib.pyplot as plt
 # from sklearn.ensemble import RandomForestClassifier
-# from sklearn.experimental import enable_iterative_imputer
-# from imblearn.over_sampling import SMOTE
-# from sklearn.impute import IterativeImputer
-# from sklearn.linear_model import Ridge
+from sklearn.experimental import enable_iterative_imputer
+from imblearn.over_sampling import SMOTE
+from sklearn.impute import IterativeImputer
+from sklearn.linear_model import Ridge
 import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_validate
 # import joblib
 # from sklearn.dummy import DummyClassifier
 # from sklearn.linear_model import LogisticRegression
@@ -38,7 +43,7 @@ import seaborn as sns
 # from lightgbm import LGBMClassifier
 # from sklearn.metrics import f1_score
 # from sklearn.metrics import precision_recall_curve
-# from imblearn.under_sampling import RandomUnderSampler
+from imblearn.under_sampling import RandomUnderSampler
 # from imblearn.pipeline import Pipeline
 # from sklearn.linear_model import SGDClassifier
 # from sklearn.ensemble import AdaBoostClassifier
@@ -161,20 +166,98 @@ removed_features = na_70 + dropped_feature
 print("Caracteristicas eliminadas:", removed_features)
 
 #%%
-arr = np.array(datos)
+y = datos['class']
+X = datos.drop('class',axis=1)
 
-aux = arr[:,0]
-n_neg = len((np.where(aux=='neg'))[0])
+def imputation(df,mis_col):
+    """
+    This function imputes Missing values 
+    using Median on given features, and
+    Model Based Imputation on the rest
+    
+    """
+    
+    # Using sklearn's SimpleImputer
+    median_imputer = SimpleImputer(missing_values=np.NaN , strategy='median',copy=True)
 
-print(n_neg, len(arr[:,0]) - n_neg)
+    # Creating a new dataframe of imputed values
+    median_df = median_imputer.fit_transform(df[mis_col])
+    df1 = df.copy()
+    df1[mis_col] = median_df
 
-#Dimensiones del dataset
-print("\n-----------------------------------")
-print('Dimensiones del dataset:', datos.shape)
+    # Performing Model-Based Imputation
+    mice_imputer = IterativeImputer(estimator=Ridge(random_state=0),
+                                    random_state=0)
+    imputed_df = pd.DataFrame(data = mice_imputer.fit_transform(df1) , columns= df1.columns )
+
+    return imputed_df , median_imputer , mice_imputer
 
 
-#Valores nulos
-print("\n-----------------------------------")
-print('Datos ausentes por variables:')
-print(datos.isna().sum().sort_values())
+# List of feature names that have missing values between 5% to 15%.
+# We will impute the missing values in features with their median
+median_imputed_features = [k for k,v in nan_count.items() if v >= 5 and v < 15]
 
+imputed_x_train , MEDIAN_imputer , MICE_imputer = imputation( X , median_imputed_features )
+print("Number of features whose missing values are imputed with median are:\n",len(median_imputed_features))
+
+
+
+
+
+
+
+
+#%%
+
+dat_arr = np.array(y)
+labels = np.array([0 if i=='neg' else 1 for i in dat_arr])
+X = imputed_x_train
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    labels,
+    train_size = 0.8,
+    random_state= 1, 
+    shuffle = True)
+
+#Preprocesado
+over = SMOTE(sampling_strategy=0.3)
+under = RandomUnderSampler(sampling_strategy=0.5)
+preprocessor = ColumnTransformer(
+    [('over', over),
+     ('under', under)],
+    remainder = 'passthrough')
+
+X_train_prep, y_train_prep = preprocessor.fit(X_train, y_train)
+pipeline = Pipeline(steps = 
+                    [('over', over),
+                     ('under', under)],
+                    remainder = 'passthrough')
+
+X_train_prep, y_train_prep = pipeline.fit(X_train, y_train)
+print(X_train_prep.shape, y_train_prep.value_counts())
+# scaler = StandardScaler()
+# X_train_prep = scaler.fit_transform(X_train_prep)
+
+
+# num_cols = X_train.select_dtypes(include=['int', 'float']).columns.to_list()
+
+# preprocessor = ColumnTransformer(
+#     [('numeric', StandardScaler(), num_cols)],
+#     remainder = 'passthrough')
+
+# x_train_prep = preprocessor.fit_transform(x_train)
+# x_test_prep = preprocessor.transform(x_test)
+
+# m_lr = LogisticRegression(class_weight='balanced', max_iter=1000)
+
+# m_lr = m_lr.fit(X=x_train_prep, y=y_train)
+
+# cv_scores = cross_validate(
+#     estimator = m_lr,
+#     X = x_train_prep,
+#     y = y_train,
+#     n_jobs = -1,
+#     scoring = ('f1_macro'),
+#     cv = 5)
+# lr_scores = pd.DataFrame(cv_scores)
+# lr_mean_scores = np.array(lr_scores)
