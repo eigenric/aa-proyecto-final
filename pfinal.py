@@ -56,20 +56,22 @@ warnings.filterwarnings("ignore")
 
 datos = pd.read_csv('datos/aps_failure_training_set.csv', skiprows=20, na_values=["na"])
 
-y = datos['class']
+# y = datos['class']
 
-y[y == 'neg'] = 0
-y[y == 'pos'] = 1
+# y[y == 'neg'] = 0
+# y[y == 'pos'] = 1
 
-# Plotting the distribution of class label
-sns.barplot(y.unique(),y.value_counts())
+# Distribución de la etiqueta class
+# Neg -> 0
+# Pos -> 1
+sns.barplot(datos['class'].unique(),datos['class'].value_counts())
 plt.title('Class Label Distribution')
 plt.xlabel('Class Label')
 plt.ylabel('Count')
 plt.show()
 
-print('The number of positive class points is: ',y.value_counts()[1])
-print('The number of negative class points is: ',y.value_counts()[0])
+print('Numero de clases positivas: ',datos['class'].value_counts()[1])
+print('Numero de clases negativas: ',datos['class'].value_counts()[0])
 
 
 
@@ -90,10 +92,73 @@ def constant_value(df):
     return df,constant_value_feature
 
 datos , dropped_feature = constant_value(datos)
-print("The features that are dropped due to having a constant value (0 std. dev.) are: ",dropped_feature)
-print("Shape of our feature set: ",datos.shape)
+print("Caracteristicas eliminadas con 0 varianza (0 std. dev.): ",dropped_feature)
+print("Dimensiones dataset: ",datos.shape)
 
-X = datos.drop('class', axis = 1)
+
+#%%
+#datos perdidos
+
+# Se crea un diccionario con clave el nombre de las columnas,
+# y values el porcentaje de datos perdidos
+nan_count = {k:list(datos.isna().sum()*100/datos.shape[0])[i] for i,k in enumerate(datos.columns)}
+
+# Se ordena el diccionario en orden descendente
+nan_count = {k: v for k, v in sorted(nan_count.items(), key=lambda item: item[1],reverse=True)}
+
+#Se muestran las 15 característica con porcentaje de datos perdidos más alto
+sns.set_style(style="whitegrid")
+plt.figure(figsize=(20,10))
+
+# Gráfico de barras
+plot = sns.barplot(x= list(nan_count.keys())[:15],y = list(nan_count.values())[:15],palette="hls")
+
+# Se añade el porcentaje encima de cada columna
+for p in plot.patches:
+        plot.annotate('{:.1f}%'.format(p.get_height()), (p.get_x()+0.2, p.get_height()+1))
+
+
+plot.set_yticklabels(map('{:.1f}%'.format, plot.yaxis.get_majorticklocs())) 
+plt.show()
+
+#%%
+'''
+    Esta función elimina las característica con más del 70%
+    de datos perdidos, y elimina las filas que tienen
+    valores NA de características que tienen  menos del 5% de
+    datos perdidos
+'''
+
+# df: Dataframe con los datos del problema
+# nan_feat: Lista de características que contienen menos del 5% NA
+def remove_na(df,nan_feat):
+    # Elimina características con más del 70% NA
+    df = df.dropna(axis = 1, thresh=18000)
+    
+    # Elimina files que contienen NA de la lista pasada, nan_feat
+    df = df.dropna(subset=nan_feat)
+
+    # Resetea los valores de los índices 
+    df = df.reset_index(drop=True)
+    return df
+
+print("Tamaño del dataset previo eliminación de datos perdidos:",datos.shape)
+
+
+# Lista de características que contienen menos del 5% NA
+na_5 = [k for k,v in nan_count.items() if v < 5]
+
+datos = remove_na(datos,na_5)
+print("Dimension despues de eliminar filas y columnas:",datos.shape)
+print("Numero de caracteristicas con menos del 5% de datos perdidos:",len(na_5))
+
+# lista con las 7 características con mayor valor de datos perdidos
+# creating a list of the top 7 features having highest number of missing values
+na_70 = list(nan_count.keys())[:7]
+
+# Total removed features
+removed_features = na_70 + dropped_feature
+print("Caracteristicas eliminadas:", removed_features)
 
 #%%
 arr = np.array(datos)
