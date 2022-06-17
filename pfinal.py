@@ -167,76 +167,58 @@ print("Caracteristicas eliminadas:", removed_features)
 
 #%%
 y = datos['class']
+
 X = datos.drop('class',axis=1)
 
-def imputation(df,mis_col):
-    """
-    This function imputes Missing values 
-    using Median on given features, and
-    Model Based Imputation on the rest
-    
-    """
-    
-    # Using sklearn's SimpleImputer
-    median_imputer = SimpleImputer(missing_values=np.NaN , strategy='median',copy=True)
-
-    # Creating a new dataframe of imputed values
-    median_df = median_imputer.fit_transform(df[mis_col])
-    df1 = df.copy()
-    df1[mis_col] = median_df
-
-    # Performing Model-Based Imputation
-    mice_imputer = IterativeImputer(estimator=Ridge(random_state=0),
-                                    random_state=0)
-    imputed_df = pd.DataFrame(data = mice_imputer.fit_transform(df1) , columns= df1.columns )
-
-    return imputed_df , median_imputer , mice_imputer
 
 
 # List of feature names that have missing values between 5% to 15%.
 # We will impute the missing values in features with their median
-median_imputed_features = [k for k,v in nan_count.items() if v >= 5 and v < 15]
+mis_col = [k for k,v in nan_count.items() if v >= 5 and v < 70]
+median_imputer = SimpleImputer(missing_values=np.nan, strategy='median',copy=True)
 
-imputed_x_train , MEDIAN_imputer , MICE_imputer = imputation( X , median_imputed_features )
-print("Number of features whose missing values are imputed with median are:\n",len(median_imputed_features))
+# Dataframe con los valores imputados
+median_df = median_imputer.fit_transform(X[mis_col])
+X[mis_col] = median_df
 
 
 
 
+#Lectura datos de test
+X_test = pd.read_csv('datos/aps_failure_test_set.csv', skiprows=20, na_values=["na"])
+y_test = X_test['class']
+y_test[y_test == 'neg'] = 0
+y_test[y_test == 'pos'] = 1
+X_test = X_test.drop('class', axis = 1)
+
+#Se eliminan las columnas con mas del 70% de valores perdidos
+X_test = X_test.drop(removed_features, axis = 1)
+X_test[mis_col] = median_imputer.transform(X_test[mis_col])
+
+print("Dimension del conjunto de test: ",X_test.shape)
 
 
 
 
 #%%
 
-dat_arr = np.array(y)
-labels = np.array([0 if i=='neg' else 1 for i in dat_arr])
-X = imputed_x_train
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    labels,
-    train_size = 0.8,
-    random_state= 1, 
-    shuffle = True)
+
 
 #Preprocesado
 over = SMOTE(sampling_strategy=0.3)
+X_train, y_train = over.fit_resample(X, y)
 under = RandomUnderSampler(sampling_strategy=0.5)
-preprocessor = ColumnTransformer(
-    [('over', over),
-     ('under', under)],
-    remainder = 'passthrough')
+X_train, y_train = under.fit_resample(X_train, y_train)
+y_train[y_train == 'neg'] = 0
+y_train[y_train == 'pos'] = 1
+print('Dimension despues de Smote y Undersampling: ', X_train.shape)
+print('Numero de muestras de cada clase:\n', y_train.value_counts())
 
-X_train_prep, y_train_prep = preprocessor.fit(X_train, y_train)
-pipeline = Pipeline(steps = 
-                    [('over', over),
-                     ('under', under)],
-                    remainder = 'passthrough')
 
-X_train_prep, y_train_prep = pipeline.fit(X_train, y_train)
-print(X_train_prep.shape, y_train_prep.value_counts())
-# scaler = StandardScaler()
-# X_train_prep = scaler.fit_transform(X_train_prep)
+
+scaler = StandardScaler()
+X_train_prep = scaler.fit_transform(X_train)
+X_test_prep = scaler.transform(X_test)
 
 
 # num_cols = X_train.select_dtypes(include=['int', 'float']).columns.to_list()
