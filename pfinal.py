@@ -60,7 +60,7 @@ warnings.filterwarnings("ignore")
 
 
 datos = pd.read_csv('datos/aps_failure_training_set.csv', skiprows=20, na_values=["na"])
-
+datos['class'] = datos['class'].replace(['neg','pos'],[0,1])
 # y = datos['class']
 
 # y[y == 'neg'] = 0
@@ -187,8 +187,7 @@ X[mis_col] = median_df
 #Lectura datos de test
 X_test = pd.read_csv('datos/aps_failure_test_set.csv', skiprows=20, na_values=["na"])
 y_test = X_test['class']
-y_test[y_test == 'neg'] = 0
-y_test[y_test == 'pos'] = 1
+y_test = y_test.replace(['neg', 'pos'], [0, 1])
 X_test = X_test.drop('class', axis = 1)
 
 #Se eliminan las columnas con mas del 70% de valores perdidos
@@ -209,8 +208,6 @@ over = SMOTE(sampling_strategy=0.3)
 X_train, y_train = over.fit_resample(X, y)
 under = RandomUnderSampler(sampling_strategy=0.5)
 X_train, y_train = under.fit_resample(X_train, y_train)
-y_train[y_train == 'neg'] = 0
-y_train[y_train == 'pos'] = 1
 print('Dimension despues de Smote y Undersampling: ', X_train.shape)
 print('Numero de muestras de cada clase:\n', y_train.value_counts())
 
@@ -230,16 +227,16 @@ X_test_prep = scaler.transform(X_test)
 # x_train_prep = preprocessor.fit_transform(x_train)
 # x_test_prep = preprocessor.transform(x_test)
 
-# m_lr = LogisticRegression(class_weight='balanced', max_iter=1000)
+m_lr = LogisticRegression()
 
-# m_lr = m_lr.fit(X=x_train_prep, y=y_train)
+m_lr = m_lr.fit(X=X_train_prep, y=y_train)
 
-# cv_scores = cross_validate(
-#     estimator = m_lr,
-#     X = x_train_prep,
-#     y = y_train,
-#     n_jobs = -1,
-#     scoring = ('f1_macro'),
-#     cv = 5)
-# lr_scores = pd.DataFrame(cv_scores)
-# lr_mean_scores = np.array(lr_scores)
+cv_scores = cross_validate(
+    estimator = m_lr,
+    X = X_train_prep,
+    y = y_train,
+    n_jobs = -1,
+    scoring = ('f1_macro'),
+    cv = 5)
+lr_scores = pd.DataFrame(cv_scores)
+lr_mean_scores = np.array(lr_scores)
