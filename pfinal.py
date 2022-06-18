@@ -27,12 +27,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_validate
 # import joblib
-# from sklearn.dummy import DummyClassifier
-# from sklearn.linear_model import LogisticRegression
 # from sklearn.model_selection import RandomizedSearchCV
 # from sklearn.model_selection import GridSearchCV
 # from sklearn.metrics import roc_curve,auc
-# from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix
 # from sklearn.naive_bayes import GaussianNB
 # from scipy.stats import uniform,randint
 # from tqdm import tqdm
@@ -41,7 +39,7 @@ from sklearn.model_selection import cross_validate
 # from xgboost import XGBClassifier
 # from sklearn.preprocessing import MinMaxScaler
 # from lightgbm import LGBMClassifier
-# from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score
 # from sklearn.metrics import precision_recall_curve
 from imblearn.under_sampling import RandomUnderSampler
 # from imblearn.pipeline import Pipeline
@@ -140,9 +138,9 @@ def remove_na(df,nan_feat):
     # Elimina características con más del 70% NA
     df = df.dropna(axis = 1, thresh=18000)
     
-    # Elimina files que contienen NA de la lista pasada, nan_feat
+    # Elimina filas que contienen NA de la lista pasada, nan_feat
     df = df.dropna(subset=nan_feat)
-
+    print('EEEEEEEEEEE')
     # Resetea los valores de los índices 
     df = df.reset_index(drop=True)
     return df
@@ -186,14 +184,21 @@ X[mis_col] = median_df
 
 #Lectura datos de test
 X_test = pd.read_csv('datos/aps_failure_test_set.csv', skiprows=20, na_values=["na"])
+# y_test = X_test['class']
+# y_test = y_test.replace(['neg', 'pos'], [0, 1])
+# X_test = X_test.drop('class', axis = 1)
+
+nan_count_test = {k:list(X_test.isna().sum()*100/X_test.shape[0])[i] for i,k in enumerate(X_test.columns)}
+nan_5_test = [k for k,v in nan_count_test.items() if v < 5]
+X_test = X_test.dropna(subset = nan_5_test)
 y_test = X_test['class']
 y_test = y_test.replace(['neg', 'pos'], [0, 1])
 X_test = X_test.drop('class', axis = 1)
-
 #Se eliminan las columnas con mas del 70% de valores perdidos
 X_test = X_test.drop(removed_features, axis = 1)
 X_test[mis_col] = median_imputer.transform(X_test[mis_col])
 
+  
 print("Dimension del conjunto de test: ",X_test.shape)
 
 
@@ -218,25 +223,59 @@ X_train_prep = scaler.fit_transform(X_train)
 X_test_prep = scaler.transform(X_test)
 
 
-# num_cols = X_train.select_dtypes(include=['int', 'float']).columns.to_list()
 
-# preprocessor = ColumnTransformer(
-#     [('numeric', StandardScaler(), num_cols)],
-#     remainder = 'passthrough')
+#%%
+#Representa la matriz de confusión
+def plot_confusion( y_test , y_hat ):
+    """
+    This function plots the Confusion Matrix
+    based on the true and predicted class labels
+    """    
+    # Show Confusion Matrix Heatmap
+    cf_matrix_test = confusion_matrix(y_test , y_hat)
+        
+    group_names = ["TN","FP","FN","TP"]
+    group_counts = ["{}".format(value) for value in cf_matrix_test.flatten()]
+    labels = [f"{v1}\n{v2}" for v1, v2 in zip(group_names,group_counts)]
+    labels = np.asarray(labels).reshape(2,2)
 
-# x_train_prep = preprocessor.fit_transform(x_train)
-# x_test_prep = preprocessor.transform(x_test)
+    sns.heatmap(cf_matrix_test, annot=labels, fmt='', cmap='Blues')
+    plt.show()
+    
+def model_results_pred( model , x_train , x_test , y_train , y_test ):
+    """
+    This function predicts class label of the data,
+    and returns the Macro-F1 Score
+    """
+    # Predic class labels
+    
+    y_train_hat = model.predict(x_train)
+    y_test_hat = model.predict(x_test) 
+    print('eeee')
+    
+    f1_macro = f1_score(y_test, y_test_hat,average='macro')
+    
+    print('\033[1m'+'Macro-F1 Score: ',f1_macro)
+    
+    # Plot Test Confusion Matrix
+    print("\tTest Confusion Matrix")
+    plot_confusion(y_test,y_test_hat)
+    
+    return f1_macro
 
-m_lr = LogisticRegression()
 
-m_lr = m_lr.fit(X=X_train_prep, y=y_train)
+m_lr = LogisticRegression(max_iter=1000)
 
-cv_scores = cross_validate(
-    estimator = m_lr,
-    X = X_train_prep,
-    y = y_train,
-    n_jobs = -1,
-    scoring = ('f1_macro'),
-    cv = 5)
-lr_scores = pd.DataFrame(cv_scores)
-lr_mean_scores = np.array(lr_scores)
+m_lr.fit(X=X_train_prep, y=y_train) 
+
+# cv_scores = cross_validate(
+#     estimator = m_lr,
+#     X = X_train_prep,
+#     y = y_train,
+#     n_jobs = -1,
+#     scoring = ('f1_macro'),
+#     cv = 5)
+# lr_scores = pd.DataFrame(cv_scores)
+# lr_mean_scores = np.array(lr_scores)
+
+F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
