@@ -26,6 +26,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_validate
+from sklearn.model_selection import cross_val_score
 # import joblib
 # from sklearn.model_selection import RandomizedSearchCV
 # from sklearn.model_selection import GridSearchCV
@@ -47,22 +48,18 @@ from imblearn.under_sampling import RandomUnderSampler
 # from sklearn.ensemble import AdaBoostClassifier
 # from prettytable import PrettyTable
 # import pickle
-
+import random
 
 import warnings
 warnings.filterwarnings("ignore")
 
-#Ejercicio de Regresion
+
 
 #Lectura de datos
 
 
 datos = pd.read_csv('datos/aps_failure_training_set.csv', skiprows=20, na_values=["na"])
 datos['class'] = datos['class'].replace(['neg','pos'],[0,1])
-# y = datos['class']
-
-# y[y == 'neg'] = 0
-# y[y == 'pos'] = 1
 
 # Distribución de la etiqueta class
 # Neg -> 0
@@ -81,11 +78,7 @@ print('Numero de clases negativas: ',datos['class'].value_counts()[0])
 
 #Quita las variables con varianza cero
 def constant_value(df):
-    """
-    This function returns a list of columns
-    that have std. deviation of 0
-    meaning, all values are constant
-    """
+    
     constant_value_feature = []
     info = df.describe(include='all')
     for i in df.columns:
@@ -140,7 +133,6 @@ def remove_na(df,nan_feat):
     
     # Elimina filas que contienen NA de la lista pasada, nan_feat
     df = df.dropna(subset=nan_feat)
-    print('EEEEEEEEEEE')
     # Resetea los valores de los índices 
     df = df.reset_index(drop=True)
     return df
@@ -170,23 +162,22 @@ X = datos.drop('class',axis=1)
 
 
 
-# List of feature names that have missing values between 5% to 15%.
-# We will impute the missing values in features with their median
+# Lista de características con datos perdidos entre el 5 y el 70%
 mis_col = [k for k,v in nan_count.items() if v >= 5 and v < 70]
+
+
 median_imputer = SimpleImputer(missing_values=np.nan, strategy='median',copy=True)
 
 # Dataframe con los valores imputados
 median_df = median_imputer.fit_transform(X[mis_col])
 X[mis_col] = median_df
+    
 
 
 
 
 #Lectura datos de test
 X_test = pd.read_csv('datos/aps_failure_test_set.csv', skiprows=20, na_values=["na"])
-# y_test = X_test['class']
-# y_test = y_test.replace(['neg', 'pos'], [0, 1])
-# X_test = X_test.drop('class', axis = 1)
 
 nan_count_test = {k:list(X_test.isna().sum()*100/X_test.shape[0])[i] for i,k in enumerate(X_test.columns)}
 nan_5_test = [k for k,v in nan_count_test.items() if v < 5]
@@ -214,7 +205,8 @@ X_train, y_train = over.fit_resample(X, y)
 under = RandomUnderSampler(sampling_strategy=0.5)
 X_train, y_train = under.fit_resample(X_train, y_train)
 print('Dimension despues de Smote y Undersampling: ', X_train.shape)
-print('Numero de muestras de cada clase:\n', y_train.value_counts())
+print('Numero de muestras de cada clase:')
+print(y_train.value_counts())
 
 
 
@@ -226,12 +218,8 @@ X_test_prep = scaler.transform(X_test)
 
 #%%
 #Representa la matriz de confusión
-def plot_confusion( y_test , y_hat ):
-    """
-    This function plots the Confusion Matrix
-    based on the true and predicted class labels
-    """    
-    # Show Confusion Matrix Heatmap
+def plot_confusion( y_test , y_hat ): 
+    
     cf_matrix_test = confusion_matrix(y_test , y_hat)
         
     group_names = ["TN","FP","FN","TP"]
@@ -243,39 +231,39 @@ def plot_confusion( y_test , y_hat ):
     plt.show()
     
 def model_results_pred( model , x_train , x_test , y_train , y_test ):
-    """
-    This function predicts class label of the data,
-    and returns the Macro-F1 Score
-    """
-    # Predic class labels
     
     y_train_hat = model.predict(x_train)
     y_test_hat = model.predict(x_test) 
-    print('eeee')
     
     f1_macro = f1_score(y_test, y_test_hat,average='macro')
     
     print('\033[1m'+'Macro-F1 Score: ',f1_macro)
     
-    # Plot Test Confusion Matrix
-    print("\tTest Confusion Matrix")
+    # Pinta matriz de confusion
     plot_confusion(y_test,y_test_hat)
     
     return f1_macro
 
+#%%
 
-m_lr = LogisticRegression(max_iter=1000)
+# modelos_lr = [LogisticRegression(C = 0.5, max_iter=1000, n_jobs=-1),
+#               LogisticRegression(C = 1, max_iter=1000, n_jobs=-1),
+#               LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+#               ]
 
-m_lr.fit(X=X_train_prep, y=y_train) 
+# results = []
+# for i in modelos_lr:
+#     i.fit(X=X_train_prep, y=y_train) 
+#     cv_scores = cross_val_score(
+#         estimator = i, 
+#         X = X_train_prep,
+#         y = y_train,
+#         scoring = 'f1_macro',
+#         cv = 5,
+#         n_jobs = -1)
+#     results.append(cv_scores.mean())
 
-# cv_scores = cross_validate(
-#     estimator = m_lr,
-#     X = X_train_prep,
-#     y = y_train,
-#     n_jobs = -1,
-#     scoring = ('f1_macro'),
-#     cv = 5)
-# lr_scores = pd.DataFrame(cv_scores)
-# lr_mean_scores = np.array(lr_scores)
 
+m_lr = LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+m_lr.fit(X_train_prep, y_train)
 F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
