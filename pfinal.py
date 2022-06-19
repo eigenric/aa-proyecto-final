@@ -3,54 +3,38 @@
 Created on Sat Jun  4 09:11:30 2022
 
 @author: Daniel Navarrete Martin
-@author: Ricardo Ruiz Fernandez Alba
+@author: Ricardo Ruiz Fernandez de Alba
 """
 
+
+#%%
 # Tratamiento de datos
 # ==============================================================================
 import pandas as pd
 import numpy as np
-from collections import Counter
 from sklearn.impute import SimpleImputer
-# from sklearn.feature_selection import RFE
 import matplotlib.pyplot as plt
-# from sklearn.ensemble import RandomForestClassifier
-from sklearn.experimental import enable_iterative_imputer
+from sklearn.ensemble import RandomForestClassifier
 from imblearn.over_sampling import SMOTE
-from sklearn.impute import IterativeImputer
-from sklearn.linear_model import Ridge
+
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_validate
-# import joblib
-# from sklearn.model_selection import RandomizedSearchCV
-# from sklearn.model_selection import GridSearchCV
-# from sklearn.metrics import roc_curve,auc
+from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.model_selection import cross_val_score
+from sklearn.dummy import DummyClassifier
+
+from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.metrics import confusion_matrix
-# from sklearn.naive_bayes import GaussianNB
-# from scipy.stats import uniform,randint
-# from tqdm import tqdm
-# from sklearn.tree import DecisionTreeClassifier
-# from sklearn.ensemble import RandomForestClassifier
-# from xgboost import XGBClassifier
-# from sklearn.preprocessing import MinMaxScaler
-# from lightgbm import LGBMClassifier
 from sklearn.metrics import f1_score
-# from sklearn.metrics import precision_recall_curve
 from imblearn.under_sampling import RandomUnderSampler
-# from imblearn.pipeline import Pipeline
-# from sklearn.linear_model import SGDClassifier
-# from sklearn.ensemble import AdaBoostClassifier
-# from prettytable import PrettyTable
-# import pickle
 
 
+def warn(*args, **kwargs):
+    pass
 import warnings
-warnings.filterwarnings("ignore")
+warnings.warn = warn
+
+#warnings.filterwarnings("ignore")
 
 #Ejercicio de Regresion
 
@@ -136,22 +120,23 @@ plt.show()
 # nan_feat: Lista de características que contienen menos del 5% NA
 def remove_na(df,nan_feat):
     # Elimina características con más del 70% NA
-    df = df.dropna(axis = 1, thresh=18000)
+    df = df.dropna(axis=1, thresh=18000)
     
     # Elimina filas que contienen NA de la lista pasada, nan_feat
     df = df.dropna(subset=nan_feat)
-    print('EEEEEEEEEEE')
     # Resetea los valores de los índices 
     df = df.reset_index(drop=True)
     return df
 
 print("Tamaño del dataset previo eliminación de datos perdidos:",datos.shape)
 
-
 # Lista de características que contienen menos del 5% NA
 na_5 = [k for k,v in nan_count.items() if v < 5]
+datos = remove_na(datos, na_5)
 
-datos = remove_na(datos,na_5)
+nan_thresh = int(0.85 * len(datos.columns))
+datos = datos.dropna(thresh=nan_thresh)
+
 print("Dimension despues de eliminar filas y columnas:",datos.shape)
 print("Numero de caracteristicas con menos del 5% de datos perdidos:",len(na_5))
 
@@ -164,23 +149,24 @@ removed_features = na_70 + dropped_feature
 print("Caracteristicas eliminadas:", removed_features)
 
 #%%
-y = datos['class']
+y_train = datos['class']
 
-X = datos.drop('class',axis=1)
-
+X_train = datos.drop('class', axis=1)
 
 
 # List of feature names that have missing values between 5% to 15%.
 # We will impute the missing values in features with their median
-mis_col = [k for k,v in nan_count.items() if v >= 5 and v < 70]
-median_imputer = SimpleImputer(missing_values=np.nan, strategy='median',copy=True)
+mis_col = [k for k,v in nan_count.items() if 5 < v < 70]
+mean_imputer = SimpleImputer(missing_values=np.nan, strategy='mean',copy=True)
 
 # Dataframe con los valores imputados
-median_df = median_imputer.fit_transform(X[mis_col])
-X[mis_col] = median_df
+# Criterio: Valor medio más valor aleatorio uniforme
+# en [-1.5sigma, 1.5sigma] con sigma cada desviación típica
 
-
-
+mean_df = mean_imputer.fit_transform(X_train[mis_col])
+stds = np.std(X_train, axis=0)[mis_col]
+noise = np.random.uniform(-1.5*stds, 1.5*stds)
+X_train[mis_col] = mean_df + noise
 
 #Lectura datos de test
 X_test = pd.read_csv('datos/aps_failure_test_set.csv', skiprows=20, na_values=["na"])
@@ -196,21 +182,21 @@ y_test = y_test.replace(['neg', 'pos'], [0, 1])
 X_test = X_test.drop('class', axis = 1)
 #Se eliminan las columnas con mas del 70% de valores perdidos
 X_test = X_test.drop(removed_features, axis = 1)
-X_test[mis_col] = median_imputer.transform(X_test[mis_col])
+
+mean_df_test = mean_imputer.transform(X_test[mis_col])
+noise_test = np.random.uniform(-1.5*stds, 1.5*stds)
+X_test[mis_col] = mean_df_test + noise
 
   
-print("Dimension del conjunto de test: ",X_test.shape)
-
-
-
-
+print("Dimension del conjunto de test: ", X_test.shape)
 #%%
 
 
 
+#%%
 #Preprocesado
 over = SMOTE(sampling_strategy=0.3)
-X_train, y_train = over.fit_resample(X, y)
+X_train, y_train = over.fit_resample(X_train, y_train)
 under = RandomUnderSampler(sampling_strategy=0.5)
 X_train, y_train = under.fit_resample(X_train, y_train)
 print('Dimension despues de Smote y Undersampling: ', X_train.shape)
@@ -226,11 +212,12 @@ X_test_prep = scaler.transform(X_test)
 
 #%%
 #Representa la matriz de confusión
-def plot_confusion( y_test , y_hat ):
+def plot_confusion(y_test, y_hat):
     """
-    This function plots the Confusion Matrix
-    based on the true and predicted class labels
-    """    
+    Matriz de Confusion según las etiquetas 
+    verdaderas y predichas.
+    """
+    
     # Show Confusion Matrix Heatmap
     cf_matrix_test = confusion_matrix(y_test , y_hat)
         
@@ -242,18 +229,18 @@ def plot_confusion( y_test , y_hat ):
     sns.heatmap(cf_matrix_test, annot=labels, fmt='', cmap='Blues')
     plt.show()
     
-def model_results_pred( model , x_train , x_test , y_train , y_test ):
+def model_results_pred(model, x_train , x_test , y_train , y_test ):
     """
-    This function predicts class label of the data,
-    and returns the Macro-F1 Score
+    Esta funcion predice la etiqueta de clase y devuelve
+    la puntuación Macro-F1
     """
+    
     # Predic class labels
     
-    y_train_hat = model.predict(x_train)
+    #y_train_hat = model.predict(x_train)
     y_test_hat = model.predict(x_test) 
-    print('eeee')
     
-    f1_macro = f1_score(y_test, y_test_hat,average='macro')
+    f1_macro = f1_score(y_test, y_test_hat, average='macro')
     
     print('\033[1m'+'Macro-F1 Score: ',f1_macro)
     
@@ -264,18 +251,178 @@ def model_results_pred( model , x_train , x_test , y_train , y_test ):
     return f1_macro
 
 
-m_lr = LogisticRegression(max_iter=1000)
+# Baseline para comparar el resto de modelos
 
-m_lr.fit(X=X_train_prep, y=y_train) 
+baseline = DummyClassifier(strategy='constant', constant=0)
+baseline.fit(X_train_prep, y_train)
 
-# cv_scores = cross_validate(
-#     estimator = m_lr,
-#     X = X_train_prep,
-#     y = y_train,
-#     n_jobs = -1,
-#     scoring = ('f1_macro'),
-#     cv = 5)
-# lr_scores = pd.DataFrame(cv_scores)
-# lr_mean_scores = np.array(lr_scores)
+print("Baseline: ")
+F1_Base = model_results_pred(baseline, 
+                             X_train_prep, X_test_prep, 
+                             y_train, y_test)
 
+# MODELO LINEAL
+# Regresion Logistica
+
+# modelos_lr = [LogisticRegression(C = 0.5, max_iter=1000, n_jobs=-1),
+#               LogisticRegression(C = 1, max_iter=1000, n_jobs=-1),
+#               LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+#               ]
+
+# results = []
+# for i in modelos_lr:
+#     i.fit(X=X_train_prep, y=y_train) 
+#     cv_scores = cross_val_score(
+#         estimator = i, 
+#         X = X_train_prep,
+#         y = y_train,
+#         scoring = 'f1_macro',
+#         cv = 5,
+#         n_jobs = -1)
+#     results.append(cv_scores.mean())
+
+import time
+start_time = time.time()
+
+print("Regresión Logística: ")
+m_lr = LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+m_lr.fit(X_train_prep, y_train)
 F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
+
+print("--- %s seconds ---" % (time.time() - start_time))
+
+#%%
+def VC_k_fold(X, y, model, params, cv=5):
+    """Realiza validación cruzada 5-fold. Devuelve la puntuación media"""
+
+    model.set_params(**params)
+                       
+    cv = RepeatedStratifiedKFold(n_splits=cv, random_state=1)
+    scores = cross_val_score(model, X, y, scoring='f1_macro',
+                             cv=cv, n_jobs=-1)
+                            
+    return np.mean(scores)
+
+
+
+# MODELOS NO LINEALES
+# Support Vector Machine. 
+
+def ajuste_lr_alpha(params, step_size=0.1):
+    """Siguientes hiperparámetros del espacio de búsqueda"""
+
+    alpha, alpha_or = params["alpha"], params["alpha"]
+    new_alpha = alpha +  step_size
+    new_alpha = alpha_or if new_alpha <= 0.0 else new_alpha
+
+    new_lr_alpha = {"alpha": new_alpha}
+    params.update(new_lr_alpha)
+
+    return params
+
+
+def tuning(X, y, model, params, step_size=0.1, cv=5, n_repeat=3):
+    """Ajusta los parametros en el espacio de búsqueda"""
+    
+    best_params = params.copy()
+    best_score = VC_k_fold(X, y, model, params, cv=cv)
+    
+    for i in range(n_repeat-1):
+        params = ajuste_lr_alpha(params, step_size)
+        score = VC_k_fold(X, y, model, params, cv=cv)
+     
+        if score >= best_score:
+            best_params, best_score = params.copy(), score
+    
+    return best_params, best_score
+
+print("Support Vector Machine (SVM): ")
+
+# Parámetros iniciales del espacio de búsqueda
+params = {"penalty": "l2", 
+          "alpha": 2.55e-3, 
+          "tol" : 0.1,
+          "max_iter": 1000}
+
+params_or = params.copy()
+start_time = time.time()
+
+# Obtención de los mejores hiperparámetros paso a paso
+m_svm = SGDClassifier(loss="hinge", n_jobs=-1, random_state=0)
+
+
+ss = 1e-6
+nr = 3
+best_params_svm, best_score = tuning(X_train_prep, y_train,
+                                         m_svm,
+                                         params,
+                                         step_size=ss,
+                                         n_repeat=nr,
+                                         cv=5)
+
+m_svm.set_params(**best_params_svm)
+m_svm.fit(X_train_prep, y_train)
+F1_svm = model_results_pred(m_svm, X_train_prep, X_test_prep, y_train, y_test)
+#print(f"Mejores Parámetros: {best_params_svm}")
+print("--- %s seconds ---" % (time.time() - start_time))
+
+#%%
+
+# Random Forest
+
+def ajuste_rf_estimator(params, step_nestimators=100, step_max_depth=10):
+    """Siguientes hiperparámetros del espacio de búsqueda"""
+
+    nestimators = params["n_estimators"]
+    new_nestimators = nestimators + step_nestimators
+
+    max_depth = params["max_depth"]
+    new_max_depth = max_depth + step_max_depth
+
+    params.update({"n_estimators": new_nestimators, 
+                   "max_depth": new_max_depth})
+
+    return params
+
+
+def tuning_rf(X, y, model, params, step_nestimators=100, step_max_depth=10,
+              cv=5, n_repeat=3):
+    """Ajusta los parametros en el espacio de búsqueda"""
+    
+    best_params = params.copy()
+    best_score = VC_k_fold(X, y, model, params, cv=cv)
+    
+    for i in range(n_repeat-1):
+        params = ajuste_rf_estimator(params, 
+                                     step_nestimators=step_nestimators,
+                                     step_max_depth=step_max_depth)
+        
+        score = VC_k_fold(X, y, model, params, cv=cv)
+     
+        if score >= best_score:
+            best_params, best_score = params.copy(), score
+    
+    return best_params, best_score
+
+
+params = {'n_estimators': 5,
+          'max_depth': 75}
+
+start_time = time.time()
+
+m_rf = RandomForestClassifier(n_jobs=-1, verbose=1)
+
+# Obtain best hyperparameters
+best_params_rf, best_score_rf = tuning_rf(X_train_prep,
+                                          y_train,
+                                          m_rf,
+                                          params,
+                                          step_nestimators=5,
+                                          step_max_depth=20,
+                                          n_repeat=2,
+                                          cv=5)
+
+m_rf.set_params(**best_params_rf)
+m_rf.fit(X_train_prep, y_train)
+F1_rf = model_results_pred(m_rf, X_train_prep, X_test_prep, y_train, y_test)
+print("--- %s seconds ---" % (time.time() - start_time))
