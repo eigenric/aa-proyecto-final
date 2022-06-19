@@ -496,8 +496,9 @@ def tuning_gb(X, y, model, params, step_nestimators=100,
     
     return best_params, best_score, results_gb
 
-params = {'n_estimators': 300,
-          'max_depth': 3,
+# Se prueban los parametros [300, 400], [3, 4]
+params = {'n_estimators': 400,
+          'max_depth': 4,
           'learning_rate': 0.1}
 
 import time
@@ -514,7 +515,7 @@ best_params_gb, best_score_gb, results_gb = tuning_gb(X_train_prep,
                                                       step_nestimators=100,
                                                       step_max_depth=1,
                                                       step_lr=0,
-                                                      n_repeat=2,
+                                                      n_repeat=1,
                                                       cv=5)
 
 #%%
