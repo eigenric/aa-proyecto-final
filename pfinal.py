@@ -29,19 +29,14 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from imblearn.under_sampling import RandomUnderSampler
 from lightgbm import LGBMClassifier
+from sklearn.model_selection import learning_curve
 
 def warn(*args, **kwargs):
     pass
 import warnings
 warnings.warn = warn
 
-#warnings.filterwarnings("ignore")
-
-#Ejercicio de Regresion
-
-#Lectura de datos
-
-
+#%%
 datos = pd.read_csv('datos/aps_failure_training_set.csv', skiprows=20, na_values=["na"])
 datos['class'] = datos['class'].replace(['neg','pos'],[0,1])
 # y = datos['class']
@@ -60,8 +55,6 @@ plt.show()
 
 print('Numero de clases positivas: ',datos['class'].value_counts()[1])
 print('Numero de clases negativas: ',datos['class'].value_counts()[0])
-
-
 
 
 #Quita las variables con varianza cero
@@ -285,13 +278,14 @@ for i in modelos_lr:
           n_jobs = -1)
     results.append(cv_scores.mean())
 
+print("--- %s seconds ---" % (time.time() - start_time))
+
 resultsFinal["RL"] = np.max(results)
 
 #m_lr = LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
 #m_lr.fit(X_train_prep, y_train)
 #F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
 
-print("--- %s seconds ---" % (time.time() - start_time))
 
 #%%
 def VC_k_fold(X, y, model, params, cv=5):
@@ -367,6 +361,7 @@ best_params_svm, best_score_svm, results_svm = tuning(X_train_prep, y_train,
                                                       n_repeat=nr,
                                                       cv=5)
 
+print("--- %s seconds ---" % (time.time() - start_time))
 resultsFinal["SVM"] = best_score_svm
 results_svm.sort_values(by=["score", "alpha"], 
                         ascending=False, 
@@ -377,8 +372,6 @@ print(results_svm)
 #m_svm.fit(X_train_prep, y_train)
 #F1_svm = model_results_pred(m_svm, X_train_prep, X_test_prep, y_train, y_test)
 #print(f"Mejores Parámetros: {best_params_svm}")
-print("--- %s seconds ---" % (time.time() - start_time))
-
 #%%
 
 # Random Forest
@@ -441,6 +434,8 @@ best_params_rf, best_score_rf, results_rf = tuning_rf(X_train_prep,
                                                       n_repeat=2,
                                                       cv=5)
 
+print("--- %s seconds ---" % (time.time() - start_time))
+
 resultsFinal["RF"] = best_score_rf
 results_rf.sort_values(by=["score", "n_estimators"], 
                        ascending=False, 
@@ -450,8 +445,6 @@ print(results_rf)
 #m_rf.set_params(**best_params_rf)
 #m_rf.fit(X_train_prep, y_train)
 #F1_rf = model_results_pred(m_rf, X_train_prep, X_test_prep, y_train, y_test)
-print("--- %s seconds ---" % (time.time() - start_time))
-
 #%%
 
 # Gradient Boosting 
@@ -503,8 +496,8 @@ def tuning_gb(X, y, model, params, step_nestimators=100,
     
     return best_params, best_score, results_gb
 
-params = {'n_estimators': 400,
-          'max_depth': 4,
+params = {'n_estimators': 300,
+          'max_depth': 3,
           'learning_rate': 0.1}
 
 import time
@@ -530,12 +523,7 @@ results_gb.sort_values(by=["score", "n_estimators"],
                        ascending=False, 
                        inplace=True)
 print(results_gb)
-
-m_gb.set_params(**best_params_gb)
-m_gb.fit(X_train_prep, y_train)
-F1_gb = model_results_pred(m_gb, X_train_prep, X_test_prep, y_train, y_test)
 print("--- %s seconds ---" % (time.time() - start_time))
-
 
 #%%
 # Eleccion del mejor modelo
@@ -543,6 +531,11 @@ print("--- %s seconds ---" % (time.time() - start_time))
 resultsFinal = sorted(resultsFinal.items(), key=lambda m: m[1],
                       reverse=True)
 
+# Evaluacion del mejor modelo en test
+
+m_gb.set_params(**best_params_gb)
+m_gb.fit(X_train_prep, y_train)
+F1_gb = model_results_pred(m_gb, X_train_prep, X_test_prep, y_train, y_test)
 
 train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(
         estimator = m_gb,
@@ -550,7 +543,7 @@ train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(
         y = y_train,
         cv=5,
         n_jobs=-1,
-        train_sizes=np.linspace(0.01, 1.0, 15),
+        train_sizes=np.linspace(0.1, 1.0, 10),
         return_times=True
     )
 
@@ -585,4 +578,5 @@ plt.plot(
 plt.plot(
     train_sizes, test_scores_mean, "-", color="b", label="Validation score"
 )
+# ax.set_ylim([0, 1])
 plt.legend(loc="best")
