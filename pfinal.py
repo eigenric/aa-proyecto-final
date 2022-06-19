@@ -426,3 +426,45 @@ m_rf.set_params(**best_params_rf)
 m_rf.fit(X_train_prep, y_train)
 F1_rf = model_results_pred(m_rf, X_train_prep, X_test_prep, y_train, y_test)
 print("--- %s seconds ---" % (time.time() - start_time))
+
+
+train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(
+        estimator = m_rf,
+        X = X_train,
+        y = y_train,
+        cv=5,
+        n_jobs=-1,
+        train_sizes=np.linspace(0.01, 1.0, 50),
+        return_times=True
+    )
+
+train_scores_mean = np.mean(train_scores, axis=1)
+train_scores_std = np.std(train_scores, axis=1)
+test_scores_mean = np.mean(test_scores, axis=1)
+test_scores_std = np.std(test_scores, axis=1)
+
+# Plot learning curve
+plt.grid()
+plt.fill_between(
+    train_sizes,
+    train_scores_mean - train_scores_std,
+    train_scores_mean + train_scores_std,
+    alpha=0.1,
+    color="r",
+)
+plt.fill_between(
+    train_sizes,
+    test_scores_mean - test_scores_std,
+    test_scores_mean + test_scores_std,
+    alpha=0.1,
+    color="b",
+)
+media = (train_scores_mean[-1] + test_scores_mean[-1]) / 2
+plt.plot(train_sizes, train_sizes*0 + media, "--" ,color="k")
+plt.plot(
+    train_sizes, train_scores_mean, "-", color="r", label="Training score"
+)
+plt.plot(
+    train_sizes, test_scores_mean, "-", color="b", label="Validation score"
+)
+plt.legend(loc="best")
