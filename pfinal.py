@@ -20,14 +20,15 @@ from imblearn.over_sampling import SMOTE
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression, SGDClassifier
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, learning_curve
 from sklearn.dummy import DummyClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from imblearn.under_sampling import RandomUnderSampler
-
+from lightgbm import LGBMClassifier
 
 def warn(*args, **kwargs):
     pass
@@ -189,26 +190,21 @@ X_test[mis_col] = mean_df_test + noise
 
   
 print("Dimension del conjunto de test: ", X_test.shape)
-#%%
-
 
 
 #%%
 #Preprocesado
 over = SMOTE(sampling_strategy=0.3)
 X_train, y_train = over.fit_resample(X_train, y_train)
+
 under = RandomUnderSampler(sampling_strategy=0.5)
 X_train, y_train = under.fit_resample(X_train, y_train)
 print('Dimension despues de Smote y Undersampling: ', X_train.shape)
 print('Numero de muestras de cada clase:\n', y_train.value_counts())
 
-
-
 scaler = StandardScaler()
 X_train_prep = scaler.fit_transform(X_train)
 X_test_prep = scaler.transform(X_test)
-
-
 
 #%%
 #Representa la matriz de confusión
@@ -261,33 +257,39 @@ F1_Base = model_results_pred(baseline,
                              X_train_prep, X_test_prep, 
                              y_train, y_test)
 
+#%%
 # MODELO LINEAL
 # Regresion Logistica
 
-# modelos_lr = [LogisticRegression(C = 0.5, max_iter=1000, n_jobs=-1),
-#               LogisticRegression(C = 1, max_iter=1000, n_jobs=-1),
-#               LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
-#               ]
+print("Regresión Logística: ")
 
-# results = []
-# for i in modelos_lr:
-#     i.fit(X=X_train_prep, y=y_train) 
-#     cv_scores = cross_val_score(
-#         estimator = i, 
-#         X = X_train_prep,
-#         y = y_train,
-#         scoring = 'f1_macro',
-#         cv = 5,
-#         n_jobs = -1)
-#     results.append(cv_scores.mean())
+modelos_lr = [LogisticRegression(C = 0.5, max_iter=1000, n_jobs=-1),
+              LogisticRegression(C = 1, max_iter=1000, n_jobs=-1),
+              LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+              ]
+
+resultsFinal = dict()
 
 import time
 start_time = time.time()
 
-print("Regresión Logística: ")
-m_lr = LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
-m_lr.fit(X_train_prep, y_train)
-F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
+results = []
+for i in modelos_lr:
+    i.fit(X=X_train_prep, y=y_train) 
+    cv_scores = cross_val_score(
+          estimator = i, 
+          X = X_train_prep,
+          y = y_train,
+          scoring = 'f1_macro',
+          cv = 5,
+          n_jobs = -1)
+    results.append(cv_scores.mean())
+
+resultsFinal["RL"] = np.max(results)
+
+#m_lr = LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+#m_lr.fit(X_train_prep, y_train)
+#F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
@@ -303,8 +305,7 @@ def VC_k_fold(X, y, model, params, cv=5):
                             
     return np.mean(scores)
 
-
-
+#%%
 # MODELOS NO LINEALES
 # Support Vector Machine. 
 
@@ -320,27 +321,33 @@ def ajuste_lr_alpha(params, step_size=0.1):
 
     return params
 
-
 def tuning(X, y, model, params, step_size=0.1, cv=5, n_repeat=3):
     """Ajusta los parametros en el espacio de búsqueda"""
     
+    results_svm = pd.DataFrame(params, index=[0])
+
     best_params = params.copy()
     best_score = VC_k_fold(X, y, model, params, cv=cv)
+    results_svm["score"] = best_score
+    
     
     for i in range(n_repeat-1):
         params = ajuste_lr_alpha(params, step_size)
         score = VC_k_fold(X, y, model, params, cv=cv)
-     
+        params_score = {**params, "score": score}
+        results_svm = results_svm.append(params_score, 
+                                         ignore_index=True)
+        
         if score >= best_score:
             best_params, best_score = params.copy(), score
     
-    return best_params, best_score
+    return best_params, best_score, results_svm
 
 print("Support Vector Machine (SVM): ")
 
 # Parámetros iniciales del espacio de búsqueda
 params = {"penalty": "l2", 
-          "alpha": 2.55e-3, 
+          "alpha": 2.5e-3, 
           "tol" : 0.1,
           "max_iter": 1000}
 
@@ -351,18 +358,24 @@ start_time = time.time()
 m_svm = SGDClassifier(loss="hinge", n_jobs=-1, random_state=0)
 
 
-ss = 1e-6
+ss = 5e-5
 nr = 3
-best_params_svm, best_score = tuning(X_train_prep, y_train,
-                                         m_svm,
-                                         params,
-                                         step_size=ss,
-                                         n_repeat=nr,
-                                         cv=5)
+best_params_svm, best_score_svm, results_svm = tuning(X_train_prep, y_train,
+                                                      m_svm,
+                                                      params,
+                                                      step_size=ss,
+                                                      n_repeat=nr,
+                                                      cv=5)
 
-m_svm.set_params(**best_params_svm)
-m_svm.fit(X_train_prep, y_train)
-F1_svm = model_results_pred(m_svm, X_train_prep, X_test_prep, y_train, y_test)
+resultsFinal["SVM"] = best_score_svm
+results_svm.sort_values(by=["score", "alpha"], 
+                        ascending=False, 
+                        inplace=True)
+print(results_svm)
+
+#m_svm.set_params(**best_params_svm)
+#m_svm.fit(X_train_prep, y_train)
+#F1_svm = model_results_pred(m_svm, X_train_prep, X_test_prep, y_train, y_test)
 #print(f"Mejores Parámetros: {best_params_svm}")
 print("--- %s seconds ---" % (time.time() - start_time))
 
@@ -389,8 +402,11 @@ def tuning_rf(X, y, model, params, step_nestimators=100, step_max_depth=10,
               cv=5, n_repeat=3):
     """Ajusta los parametros en el espacio de búsqueda"""
     
+    results_rf = pd.DataFrame(params, index=[0])
+    
     best_params = params.copy()
     best_score = VC_k_fold(X, y, model, params, cv=cv)
+    results_rf["score"] = best_score
     
     for i in range(n_repeat-1):
         params = ajuste_rf_estimator(params, 
@@ -398,43 +414,143 @@ def tuning_rf(X, y, model, params, step_nestimators=100, step_max_depth=10,
                                      step_max_depth=step_max_depth)
         
         score = VC_k_fold(X, y, model, params, cv=cv)
-     
+        
+        params_score = {**params, "score": score}
+        results_rf = results_rf.append(params_score, 
+                                       ignore_index=True)
+
         if score >= best_score:
             best_params, best_score = params.copy(), score
     
-    return best_params, best_score
-
+    return best_params, best_score, results_rf
 
 params = {'n_estimators': 5,
           'max_depth': 75}
 
 start_time = time.time()
 
-m_rf = RandomForestClassifier(n_jobs=-1, verbose=1)
+m_rf = RandomForestClassifier(n_jobs=-1, verbose=0)
 
 # Obtain best hyperparameters
-best_params_rf, best_score_rf = tuning_rf(X_train_prep,
-                                          y_train,
-                                          m_rf,
-                                          params,
-                                          step_nestimators=5,
-                                          step_max_depth=20,
-                                          n_repeat=2,
-                                          cv=5)
+best_params_rf, best_score_rf, results_rf = tuning_rf(X_train_prep,
+                                                      y_train,
+                                                      m_rf,
+                                                      params,
+                                                      step_nestimators=5,
+                                                      step_max_depth=20,
+                                                      n_repeat=2,
+                                                      cv=5)
 
-m_rf.set_params(**best_params_rf)
-m_rf.fit(X_train_prep, y_train)
-F1_rf = model_results_pred(m_rf, X_train_prep, X_test_prep, y_train, y_test)
+resultsFinal["RF"] = best_score_rf
+results_rf.sort_values(by=["score", "n_estimators"], 
+                       ascending=False, 
+                       inplace=True)
+print(results_rf)
+
+#m_rf.set_params(**best_params_rf)
+#m_rf.fit(X_train_prep, y_train)
+#F1_rf = model_results_pred(m_rf, X_train_prep, X_test_prep, y_train, y_test)
+print("--- %s seconds ---" % (time.time() - start_time))
+
+#%%
+
+# Gradient Boosting 
+
+def ajuste_gb_estimator(params, step_nestimators=10, 
+                        step_max_depth=1, step_lr=0.1):
+    """Siguientes hiperparámetros del espacio de búsqueda"""
+
+    params["n_estimators"] +=  step_nestimators
+    params["max_depth"] += step_max_depth
+    params["learning_rate"] += step_lr
+    
+    return params
+
+
+def tuning_gb(X, y, model, params, step_nestimators=100, 
+              step_max_depth=1, step_lr=0.1,
+              cv=5, n_repeat=3):
+    """Ajusta los parametros en el espacio de búsqueda"""
+    
+    results_gb = pd.DataFrame(params, index=[0])
+    
+    best_params = params.copy()
+    print(f"0-ésima GB con {best_params}")
+    start_time = time.time()
+    best_score = VC_k_fold(X, y, model, params, cv=cv)
+    print("--- %s seconds ---" % (time.time() - start_time))
+    print(f"Score => {best_score}")
+    results_gb["score"] = best_score
+    
+    for i in range(n_repeat-1):
+        params = ajuste_gb_estimator(params, 
+                                     step_nestimators=step_nestimators,
+                                     step_max_depth=step_max_depth,
+                                     step_lr=step_lr)
+
+        print(f"{i+1}-ésima GB con {params}")             
+        start_time = time.time()
+        score = VC_k_fold(X, y, model, params, cv=cv)
+        print("--- %s seconds ---" % (time.time() - start_time))
+        print(f"Score => {score}")
+        
+        params_score = {**params, "score": score}
+        results_gb = results_gb.append(params_score, 
+                                       ignore_index=True)
+
+        if score >= best_score:
+            best_params, best_score = params.copy(), score
+    
+    return best_params, best_score, results_gb
+
+params = {'n_estimators': 400,
+          'max_depth': 4,
+          'learning_rate': 0.1}
+
+import time
+start_time = time.time()
+
+m_gb = LGBMClassifier(n_jobs=-1,
+                      random_state=42)
+
+# Obtain best hyperparameters
+best_params_gb, best_score_gb, results_gb = tuning_gb(X_train_prep,
+                                                      y_train,
+                                                      m_gb,
+                                                      params,
+                                                      step_nestimators=100,
+                                                      step_max_depth=1,
+                                                      step_lr=0,
+                                                      n_repeat=2,
+                                                      cv=5)
+
+#%%
+resultsFinal["GB"] = best_score_gb
+results_gb.sort_values(by=["score", "n_estimators"], 
+                       ascending=False, 
+                       inplace=True)
+print(results_gb)
+
+m_gb.set_params(**best_params_gb)
+m_gb.fit(X_train_prep, y_train)
+F1_gb = model_results_pred(m_gb, X_train_prep, X_test_prep, y_train, y_test)
 print("--- %s seconds ---" % (time.time() - start_time))
 
 
+#%%
+# Eleccion del mejor modelo
+
+resultsFinal = sorted(resultsFinal.items(), key=lambda m: m[1],
+                      reverse=True)
+
+
 train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(
-        estimator = m_rf,
-        X = X_train,
+        estimator = m_gb,
+        X = X_train_prep,
         y = y_train,
         cv=5,
         n_jobs=-1,
-        train_sizes=np.linspace(0.01, 1.0, 50),
+        train_sizes=np.linspace(0.01, 1.0, 15),
         return_times=True
     )
 
@@ -442,6 +558,8 @@ train_scores_mean = np.mean(train_scores, axis=1)
 train_scores_std = np.std(train_scores, axis=1)
 test_scores_mean = np.mean(test_scores, axis=1)
 test_scores_std = np.std(test_scores, axis=1)
+
+fig, ax = plt.subplots()
 
 # Plot learning curve
 plt.grid()
