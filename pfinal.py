@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
+
 """
 Created on Sat Jun  4 09:11:30 2022
 
 @author: Daniel Navarrete Martin
 @author: Ricardo Ruiz Fernandez de Alba
 """
-
 
 #%%
 # Tratamiento de datos
