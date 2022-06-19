@@ -27,6 +27,7 @@ from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from imblearn.under_sampling import RandomUnderSampler
+from sklearn.model_selection import learning_curve
 
 
 def warn(*args, **kwargs):
@@ -264,30 +265,33 @@ F1_Base = model_results_pred(baseline,
 # MODELO LINEAL
 # Regresion Logistica
 
-# modelos_lr = [LogisticRegression(C = 0.5, max_iter=1000, n_jobs=-1),
-#               LogisticRegression(C = 1, max_iter=1000, n_jobs=-1),
-#               LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
-#               ]
+modelos_lr = [LogisticRegression(C = 0.5, max_iter=1000, n_jobs=-1),
+              LogisticRegression(C = 1, max_iter=1000, n_jobs=-1),
+              LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+              ]
 
-# results = []
-# for i in modelos_lr:
-#     i.fit(X=X_train_prep, y=y_train) 
-#     cv_scores = cross_val_score(
-#         estimator = i, 
-#         X = X_train_prep,
-#         y = y_train,
-#         scoring = 'f1_macro',
-#         cv = 5,
-#         n_jobs = -1)
-#     results.append(cv_scores.mean())
+results = []
+for i in modelos_lr:
+    i.fit(X=X_train_prep, y=y_train) 
+    cv_scores = cross_val_score(
+        estimator = i, 
+        X = X_train_prep,
+        y = y_train,
+        scoring = 'f1_macro',
+        cv = 5,
+        n_jobs = -1)
+    results.append(cv_scores.mean())
 
+resultFinal = []
+results = np.array(results)
+resultFinal.append(('LR', results.max()))
 import time
 start_time = time.time()
 
 print("Regresión Logística: ")
 m_lr = LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
 m_lr.fit(X_train_prep, y_train)
-F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
+#F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
@@ -360,11 +364,12 @@ best_params_svm, best_score = tuning(X_train_prep, y_train,
                                          n_repeat=nr,
                                          cv=5)
 
-m_svm.set_params(**best_params_svm)
-m_svm.fit(X_train_prep, y_train)
-F1_svm = model_results_pred(m_svm, X_train_prep, X_test_prep, y_train, y_test)
-#print(f"Mejores Parámetros: {best_params_svm}")
-print("--- %s seconds ---" % (time.time() - start_time))
+resultFinal.append(('SVM', best_score))
+# m_svm.set_params(**best_params_svm)
+# m_svm.fit(X_train_prep, y_train)
+# F1_svm = model_results_pred(m_svm, X_train_prep, X_test_prep, y_train, y_test)
+# #print(f"Mejores Parámetros: {best_params_svm}")
+# print("--- %s seconds ---" % (time.time() - start_time))
 
 #%%
 
@@ -410,7 +415,7 @@ params = {'n_estimators': 5,
 
 start_time = time.time()
 
-m_rf = RandomForestClassifier(n_jobs=-1, verbose=1)
+m_rf = RandomForestClassifier(n_jobs=-1)
 
 # Obtain best hyperparameters
 best_params_rf, best_score_rf = tuning_rf(X_train_prep,
@@ -421,20 +426,26 @@ best_params_rf, best_score_rf = tuning_rf(X_train_prep,
                                           step_max_depth=20,
                                           n_repeat=2,
                                           cv=5)
-
+resultFinal.append(('RF', best_score_rf))
 m_rf.set_params(**best_params_rf)
 m_rf.fit(X_train_prep, y_train)
+
+
 F1_rf = model_results_pred(m_rf, X_train_prep, X_test_prep, y_train, y_test)
 print("--- %s seconds ---" % (time.time() - start_time))
+#%%
+fig, ax = plt.subplots()
 
-
+plt.title("Curva de aprendizaje para el modelo RL") 
+plt.xlabel("Training examples")
+plt.ylabel("Score")
 train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(
         estimator = m_rf,
-        X = X_train,
+        X = X_train_prep,
         y = y_train,
         cv=5,
         n_jobs=-1,
-        train_sizes=np.linspace(0.01, 1.0, 50),
+        train_sizes=np.linspace(0.1, 1.0, 10),
         return_times=True
     )
 
@@ -467,4 +478,5 @@ plt.plot(
 plt.plot(
     train_sizes, test_scores_mean, "-", color="b", label="Validation score"
 )
+# ax.set_ylim([0, 1])
 plt.legend(loc="best")
