@@ -6,8 +6,8 @@ Created on Sat Jun  4 09:11:30 2022
 @author: Daniel Navarrete Martin
 @author: Ricardo Ruiz Fernandez de Alba
 """
+# Enlace ficheros de datos consigna UGR: https://consigna.ugr.es/f/0t2Ee6Pj5MG4JXdv/datos.rar
 
-#%%
 # Tratamiento de datos
 # ==============================================================================
 import pandas as pd
@@ -20,9 +20,8 @@ from imblearn.over_sampling import SMOTE
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression, SGDClassifier
-from sklearn.model_selection import cross_val_score, learning_curve
+from sklearn.model_selection import cross_val_score
 from sklearn.dummy import DummyClassifier
-from sklearn.ensemble import GradientBoostingClassifier
 
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.metrics import confusion_matrix
@@ -35,17 +34,16 @@ def warn(*args, **kwargs):
 import warnings
 warnings.warn = warn
 
-#%%
+
 datos = pd.read_csv('datos/aps_failure_training_set.csv', skiprows=20, na_values=["na"])
 datos['class'] = datos['class'].replace(['neg','pos'],[0,1])
-# y = datos['class']
 
-# y[y == 'neg'] = 0
-# y[y == 'pos'] = 1
 
 # Distribución de la etiqueta class
 # Neg -> 0
 # Pos -> 1
+
+#Se genera una gráfica con la distribución de la etiqueta 'class'
 sns.barplot(datos['class'].unique(),datos['class'].value_counts())
 plt.title('Class Label Distribution')
 plt.xlabel('Class Label')
@@ -58,11 +56,6 @@ print('Numero de clases negativas: ',datos['class'].value_counts()[0])
 
 #Quita las variables con varianza cero
 def constant_value(df):
-    """
-    This function returns a list of columns
-    that have std. deviation of 0
-    meaning, all values are constant
-    """
     constant_value_feature = []
     info = df.describe(include='all')
     for i in df.columns:
@@ -75,8 +68,9 @@ datos , dropped_feature = constant_value(datos)
 print("Caracteristicas eliminadas con 0 varianza (0 std. dev.): ",dropped_feature)
 print("Dimensiones dataset: ",datos.shape)
 
+input('Pulse una tecla para continuar')
 
-#%%
+
 #datos perdidos
 
 # Se crea un diccionario con clave el nombre de las columnas,
@@ -86,7 +80,7 @@ nan_count = {k:list(datos.isna().sum()*100/datos.shape[0])[i] for i,k in enumera
 # Se ordena el diccionario en orden descendente
 nan_count = {k: v for k, v in sorted(nan_count.items(), key=lambda item: item[1],reverse=True)}
 
-#Se muestran las 15 característica con porcentaje de datos perdidos más alto
+#Se muestran las 15 características con porcentaje de datos perdidos más alto
 sns.set_style(style="whitegrid")
 plt.figure(figsize=(20,10))
 
@@ -101,7 +95,7 @@ for p in plot.patches:
 plot.set_yticklabels(map('{:.1f}%'.format, plot.yaxis.get_majorticklocs())) 
 plt.show()
 
-#%%
+
 '''
     Esta función elimina las característica con más del 70%
     de datos perdidos, y elimina las filas que tienen
@@ -121,12 +115,14 @@ def remove_na(df,nan_feat):
     df = df.reset_index(drop=True)
     return df
 
+print('Eliminación de datos perdidos: ')
 print("Tamaño del dataset previo eliminación de datos perdidos:",datos.shape)
 
 # Lista de características que contienen menos del 5% NA
 na_5 = [k for k,v in nan_count.items() if v < 5]
 datos = remove_na(datos, na_5)
 
+# Elimina las filas con más del 15% de valores perdidos
 nan_thresh = int(0.85 * len(datos.columns))
 datos = datos.dropna(thresh=nan_thresh)
 
@@ -134,21 +130,23 @@ print("Dimension despues de eliminar filas y columnas:",datos.shape)
 print("Numero de caracteristicas con menos del 5% de datos perdidos:",len(na_5))
 
 # lista con las 7 características con mayor valor de datos perdidos
-# creating a list of the top 7 features having highest number of missing values
 na_70 = list(nan_count.keys())[:7]
 
-# Total removed features
+
 removed_features = na_70 + dropped_feature
 print("Caracteristicas eliminadas:", removed_features)
+input('Pulse una tecla para continuar')
 
-#%%
+
+
+# Asignación datos de entrenamiento
 y_train = datos['class']
 
 X_train = datos.drop('class', axis=1)
 
 
-# List of feature names that have missing values between 5% to 15%.
-# We will impute the missing values in features with their median
+# Lista de características con valores perdidos entre 5% y 15%
+# Imputaremos los datos perdidos calculando su media
 mis_col = [k for k,v in nan_count.items() if 5 < v < 70]
 mean_imputer = SimpleImputer(missing_values=np.nan, strategy='mean',copy=True)
 
@@ -163,10 +161,8 @@ X_train[mis_col] = mean_df + noise
 
 #Lectura datos de test
 X_test = pd.read_csv('datos/aps_failure_test_set.csv', skiprows=20, na_values=["na"])
-# y_test = X_test['class']
-# y_test = y_test.replace(['neg', 'pos'], [0, 1])
-# X_test = X_test.drop('class', axis = 1)
 
+# Preparación de datos de test
 nan_count_test = {k:list(X_test.isna().sum()*100/X_test.shape[0])[i] for i,k in enumerate(X_test.columns)}
 nan_5_test = [k for k,v in nan_count_test.items() if v < 5]
 X_test = X_test.dropna(subset = nan_5_test)
@@ -182,10 +178,11 @@ X_test[mis_col] = mean_df_test + noise
 
   
 print("Dimension del conjunto de test: ", X_test.shape)
+input('Pulse una tecla para continuar')
 
 
-#%%
-#Preprocesado
+#Preprocesado de los datos
+print('Preprocesado de los datos:')
 over = SMOTE(sampling_strategy=0.3)
 X_train, y_train = over.fit_resample(X_train, y_train)
 
@@ -197,69 +194,25 @@ print('Numero de muestras de cada clase:\n', y_train.value_counts())
 scaler = StandardScaler()
 X_train_prep = scaler.fit_transform(X_train)
 X_test_prep = scaler.transform(X_test)
-
-#%%
-#Representa la matriz de confusión
-def plot_confusion(y_test, y_hat):
-    """
-    Matriz de Confusion según las etiquetas 
-    verdaderas y predichas.
-    """
-    
-    # Show Confusion Matrix Heatmap
-    cf_matrix_test = confusion_matrix(y_test , y_hat)
-        
-    group_names = ["TN","FP","FN","TP"]
-    group_counts = ["{}".format(value) for value in cf_matrix_test.flatten()]
-    labels = [f"{v1}\n{v2}" for v1, v2 in zip(group_names,group_counts)]
-    labels = np.asarray(labels).reshape(2,2)
-
-    sns.heatmap(cf_matrix_test, annot=labels, fmt='', cmap='Blues')
-    plt.show()
-    
-def model_results_pred(model, x_train , x_test , y_train , y_test ):
-    """
-    Esta funcion predice la etiqueta de clase y devuelve
-    la puntuación Macro-F1
-    """
-    
-    # Predic class labels
-    
-    #y_train_hat = model.predict(x_train)
-    y_test_hat = model.predict(x_test) 
-    
-    f1_macro = f1_score(y_test, y_test_hat, average='macro')
-    
-    print('\033[1m'+'Macro-F1 Score: ',f1_macro)
-    
-    # Plot Test Confusion Matrix
-    print("\tTest Confusion Matrix")
-    plot_confusion(y_test,y_test_hat)
-    
-    return f1_macro
+input('Pulse una tecla para continuar')
 
 
-# Baseline para comparar el resto de modelos
 
-baseline = DummyClassifier(strategy='constant', constant=0)
-baseline.fit(X_train_prep, y_train)
-
-print("Baseline: ")
-F1_Base = model_results_pred(baseline, 
-                             X_train_prep, X_test_prep, 
-                             y_train, y_test)
-
-#%%
 # MODELO LINEAL
 # Regresion Logistica
 
 print("Regresión Logística: ")
 
-modelos_lr = [LogisticRegression(penalty = 'l1', C = 0.5, max_iter=1000,  solver='liblinear', random_state=30),
-              LogisticRegression(penalty = 'l1', C = 1, max_iter=1000, solver = 'liblinear', random_state=30),
+# Se crean varios modelos para estimar los hiperparámetros
+
+# Los siguientes modelos se encuentran comentados para reducir el tiempo de ejecución.
+# Se han tenido en cuenta en la memoria
+
+modelos_lr = [# LogisticRegression(penalty = 'l1', C = 0.5, max_iter=1000,  solver='liblinear', random_state=30),
+              # LogisticRegression(penalty = 'l1', C = 1, max_iter=1000, solver = 'liblinear', random_state=30),
               LogisticRegression(penalty = 'l1', C = 1.5, max_iter=1000, solver = 'liblinear', random_state=30),
-              LogisticRegression(penalty = 'l1', C = 0.5, tol = 0.001, max_iter=1000, solver='liblinear', random_state=30),
-              LogisticRegression(penalty = 'l1', C = 1, tol = 0.001, max_iter=1000, solver='liblinear', random_state=30),
+              # LogisticRegression(penalty = 'l1', C = 0.5, tol = 0.001, max_iter=1000, solver='liblinear', random_state=30),
+              # LogisticRegression(penalty = 'l1', C = 1, tol = 0.001, max_iter=1000, solver='liblinear', random_state=30),
               LogisticRegression(penalty = 'l1', C = 1.5, tol = 0.001, max_iter=1000,  solver='liblinear', random_state=30)
               ]
 
@@ -272,6 +225,8 @@ results = []
 cont = 1
 best_lr = None
 best_result = 0
+# Se realiza Validación Cruzada con los distintos modelos
+
 for i in modelos_lr:    
     i.fit(X=X_train_prep, y=y_train) 
     cv_scores = cross_val_score(
@@ -293,13 +248,14 @@ for i in modelos_lr:
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
+# Se guarda el mejor resultado obtenido por LR
 resultsFinal["RL"] = best_result
 
 m_lr = LogisticRegression(penalty = 'l1', C = 1.5, max_iter=1000, solver = 'liblinear', random_state=30),
+input('Pulse una tecla para continuar')
 
 
 
-#%%
 def VC_k_fold(X, y, model, params, cv=5):
     """Realiza validación cruzada 5-fold. Devuelve la puntuación media"""
 
@@ -311,8 +267,160 @@ def VC_k_fold(X, y, model, params, cv=5):
                             
     return np.mean(scores)
 
-#%%
+
 # MODELOS NO LINEALES
+
+# Random Forest
+print('Random Forest:')
+def ajuste_rf_estimator(params, step_nestimators=100, step_max_depth=10):
+    """Siguientes hiperparámetros del espacio de búsqueda"""
+
+    nestimators = params["n_estimators"]
+    new_nestimators = nestimators + step_nestimators
+
+    max_depth = params["max_depth"]
+    new_max_depth = max_depth + step_max_depth
+
+    params.update({"n_estimators": new_nestimators, 
+                   "max_depth": new_max_depth})
+
+    return params
+
+
+def tuning_rf(X, y, model, params, step_nestimators=100, step_max_depth=10,
+              cv=5, n_repeat=3):
+    """Ajusta los parametros en el espacio de búsqueda"""
+    
+    results_rf = pd.DataFrame(params, index=[0])
+    
+    best_params = params.copy()
+    best_score = VC_k_fold(X, y, model, params, cv=cv)
+    results_rf["score"] = best_score
+    
+    for i in range(n_repeat-1):
+        params = ajuste_rf_estimator(params, 
+                                     step_nestimators=step_nestimators,
+                                     step_max_depth=step_max_depth)
+        
+        score = VC_k_fold(X, y, model, params, cv=cv)
+        
+        params_score = {**params, "score": score}
+        results_rf = results_rf.append(params_score, 
+                                       ignore_index=True)
+
+        if score >= best_score:
+            best_params, best_score = params.copy(), score
+    
+    return best_params, best_score, results_rf
+
+params = {'n_estimators': 5,
+          'max_depth': 25}
+
+start_time = time.time()
+
+m_rf = RandomForestClassifier(n_jobs=-1, verbose=0)
+
+# Obtención de los mejores hiperparámetros
+best_params_rf, best_score_rf, results_rf = tuning_rf(X_train_prep,
+                                                      y_train,
+                                                      m_rf,
+                                                      params,
+                                                      step_nestimators=5,
+                                                      step_max_depth=20,
+                                                      n_repeat=3,
+                                                      cv=5)
+
+print("--- %s seconds ---" % (time.time() - start_time))
+
+resultsFinal["RF"] = best_score_rf
+results_rf.sort_values(by=["score", "n_estimators"], 
+                       ascending=False, 
+                       inplace=True)
+print(results_rf)
+input('Pulse una tecla para continuar')
+
+
+
+# Gradient Boosting 
+print('Gradient Boosting:')
+def ajuste_gb_estimator(params, step_nestimators=10, 
+                        step_max_depth=1, step_lr=0.1):
+    """Siguientes hiperparámetros del espacio de búsqueda"""
+
+    params["n_estimators"] +=  step_nestimators
+    params["max_depth"] += step_max_depth
+    params["learning_rate"] += step_lr
+    
+    return params
+
+
+def tuning_gb(X, y, model, params, step_nestimators=100, 
+              step_max_depth=1, step_lr=0.1,
+              cv=5, n_repeat=3):
+    """Ajusta los parametros en el espacio de búsqueda"""
+    
+    results_gb = pd.DataFrame(params, index=[0])
+    
+    best_params = params.copy()
+    print(f"0-ésima GB con {best_params}")
+    start_time = time.time()
+    best_score = VC_k_fold(X, y, model, params, cv=cv)
+    print("--- %s seconds ---" % (time.time() - start_time))
+    print(f"Score => {best_score}")
+    results_gb["score"] = best_score
+    
+    for i in range(n_repeat-1):
+        params = ajuste_gb_estimator(params, 
+                                     step_nestimators=step_nestimators,
+                                     step_max_depth=step_max_depth,
+                                     step_lr=step_lr)
+
+        print(f"{i+1}-ésima GB con {params}")             
+        start_time = time.time()
+        score = VC_k_fold(X, y, model, params, cv=cv)
+        print("--- %s seconds ---" % (time.time() - start_time))
+        print(f"Score => {score}")
+        
+        params_score = {**params, "score": score}
+        results_gb = results_gb.append(params_score, 
+                                       ignore_index=True)
+
+        if score >= best_score:
+            best_params, best_score = params.copy(), score
+    
+    return best_params, best_score, results_gb
+
+# Se prueban los parametros [200, 300, 400], [2, 3, 4]
+params = {'n_estimators': 200,
+          'max_depth': 2,
+          'learning_rate': 0.1}
+
+import time
+start_time = time.time()
+
+m_gb = LGBMClassifier(n_jobs=-1,
+                      random_state=42)
+
+# Obtención de los mejores hiperparámetros
+best_params_gb, best_score_gb, results_gb = tuning_gb(X_train_prep,
+                                                      y_train,
+                                                      m_gb,
+                                                      params,
+                                                      step_nestimators=100,
+                                                      step_max_depth=1,
+                                                      step_lr=0,
+                                                      n_repeat=3,
+                                                      cv=5)
+
+
+resultsFinal["GB"] = best_score_gb
+results_gb.sort_values(by=["score", "n_estimators"], 
+                       ascending=False, 
+                       inplace=True)
+print(results_gb)
+print("--- %s seconds ---" % (time.time() - start_time))
+input('Pulse una tecla para continuar')
+
 # Support Vector Machine. 
 
 def ajuste_lr_alpha(params, step_size=0.1):
@@ -380,217 +488,90 @@ results_svm.sort_values(by=["score", "alpha"],
                         ascending=False, 
                         inplace=True)
 print(results_svm)
-
-#m_svm.set_params(**best_params_svm)
-#m_svm.fit(X_train_prep, y_train)
-#F1_svm = model_results_pred(m_svm, X_train_prep, X_test_prep, y_train, y_test)
-#print(f"Mejores Parámetros: {best_params_svm}")
-#%%
-
-# Random Forest
-
-def ajuste_rf_estimator(params, step_nestimators=100, step_max_depth=10):
-    """Siguientes hiperparámetros del espacio de búsqueda"""
-
-    nestimators = params["n_estimators"]
-    new_nestimators = nestimators + step_nestimators
-
-    max_depth = params["max_depth"]
-    new_max_depth = max_depth + step_max_depth
-
-    params.update({"n_estimators": new_nestimators, 
-                   "max_depth": new_max_depth})
-
-    return params
+input('Pulse una tecla para continuar')
 
 
-def tuning_rf(X, y, model, params, step_nestimators=100, step_max_depth=10,
-              cv=5, n_repeat=3):
-    """Ajusta los parametros en el espacio de búsqueda"""
+# Elección del mejor modelo
+#Representa la matriz de confusión
+def plot_confusion(y_test, y_hat):
+    """
+    Matriz de Confusion según las etiquetas 
+    verdaderas y predichas.
+    """
     
-    results_rf = pd.DataFrame(params, index=[0])
-    
-    best_params = params.copy()
-    best_score = VC_k_fold(X, y, model, params, cv=cv)
-    results_rf["score"] = best_score
-    
-    for i in range(n_repeat-1):
-        params = ajuste_rf_estimator(params, 
-                                     step_nestimators=step_nestimators,
-                                     step_max_depth=step_max_depth)
+    fig = plt.figure()
+    cf_matrix_test = confusion_matrix(y_test , y_hat)
         
-        score = VC_k_fold(X, y, model, params, cv=cv)
-        
-        params_score = {**params, "score": score}
-        results_rf = results_rf.append(params_score, 
-                                       ignore_index=True)
+    group_names = ["TN","FP","FN","TP"]
+    group_counts = ["{}".format(value) for value in cf_matrix_test.flatten()]
+    labels = [f"{v1}\n{v2}" for v1, v2 in zip(group_names,group_counts)]
+    labels = np.asarray(labels).reshape(2,2)
 
-        if score >= best_score:
-            best_params, best_score = params.copy(), score
+    sns.heatmap(cf_matrix_test, annot=labels, fmt='', cmap='Blues')
+    plt.show()
     
-    return best_params, best_score, results_rf
-
-params = {'n_estimators': 5,
-          'max_depth': 25}
-
-start_time = time.time()
-
-m_rf = RandomForestClassifier(n_jobs=-1, verbose=0)
-
-# Obtain best hyperparameters
-best_params_rf, best_score_rf, results_rf = tuning_rf(X_train_prep,
-                                                      y_train,
-                                                      m_rf,
-                                                      params,
-                                                      step_nestimators=5,
-                                                      step_max_depth=20,
-                                                      n_repeat=3,
-                                                      cv=5)
-
-print("--- %s seconds ---" % (time.time() - start_time))
-
-resultsFinal["RF"] = best_score_rf
-results_rf.sort_values(by=["score", "n_estimators"], 
-                       ascending=False, 
-                       inplace=True)
-print(results_rf)
-
-#m_rf.set_params(**best_params_rf)
-#m_rf.fit(X_train_prep, y_train)
-#F1_rf = model_results_pred(m_rf, X_train_prep, X_test_prep, y_train, y_test)
-#%%
-
-# Gradient Boosting 
-
-def ajuste_gb_estimator(params, step_nestimators=10, 
-                        step_max_depth=1, step_lr=0.1):
-    """Siguientes hiperparámetros del espacio de búsqueda"""
-
-    params["n_estimators"] +=  step_nestimators
-    params["max_depth"] += step_max_depth
-    params["learning_rate"] += step_lr
+def model_results_pred(model, x_train , x_test , y_train , y_test ):
+    """
+    Esta funcion predice la etiqueta de clase y devuelve
+    la puntuación Macro-F1
+    """
     
-    return params
-
-
-def tuning_gb(X, y, model, params, step_nestimators=100, 
-              step_max_depth=1, step_lr=0.1,
-              cv=5, n_repeat=3):
-    """Ajusta los parametros en el espacio de búsqueda"""
+    y_test_hat = model.predict(x_test) 
     
-    results_gb = pd.DataFrame(params, index=[0])
+    f1_macro = f1_score(y_test, y_test_hat, average='macro')
     
-    best_params = params.copy()
-    print(f"0-ésima GB con {best_params}")
-    start_time = time.time()
-    best_score = VC_k_fold(X, y, model, params, cv=cv)
-    print("--- %s seconds ---" % (time.time() - start_time))
-    print(f"Score => {best_score}")
-    results_gb["score"] = best_score
+    print('\033[1m'+'Macro-F1 Score: ',f1_macro)
     
-    for i in range(n_repeat-1):
-        params = ajuste_gb_estimator(params, 
-                                     step_nestimators=step_nestimators,
-                                     step_max_depth=step_max_depth,
-                                     step_lr=step_lr)
-
-        print(f"{i+1}-ésima GB con {params}")             
-        start_time = time.time()
-        score = VC_k_fold(X, y, model, params, cv=cv)
-        print("--- %s seconds ---" % (time.time() - start_time))
-        print(f"Score => {score}")
-        
-        params_score = {**params, "score": score}
-        results_gb = results_gb.append(params_score, 
-                                       ignore_index=True)
-
-        if score >= best_score:
-            best_params, best_score = params.copy(), score
+    # Pinta la matriz de confusión
+    print("\tTest Confusion Matrix")
+    plot_confusion(y_test,y_test_hat)
     
-    return best_params, best_score, results_gb
+    return f1_macro
 
-# Se prueban los parametros [200, 300, 400], [2, 3, 4]
-params = {'n_estimators': 200,
-          'max_depth': 2,
-          'learning_rate': 0.1}
 
-import time
-start_time = time.time()
+# Baseline para comparar el resto de modelos
 
-m_gb = LGBMClassifier(n_jobs=-1,
-                      random_state=42)
+baseline = DummyClassifier(strategy='constant', constant=0)
+baseline.fit(X_train_prep, y_train)
 
-# Obtain best hyperparameters
-best_params_gb, best_score_gb, results_gb = tuning_gb(X_train_prep,
-                                                      y_train,
-                                                      m_gb,
-                                                      params,
-                                                      step_nestimators=100,
-                                                      step_max_depth=1,
-                                                      step_lr=0,
-                                                      n_repeat=3,
-                                                      cv=5)
+cv_scores = cross_val_score(
+      estimator = baseline, 
+      X = X_train_prep,
+      y = y_train,
+      scoring = 'f1_macro',
+      cv = 5,
+      n_jobs = -1)
+resultsFinal = dict()
+resultsFinal['Baseline'] = cv_scores.mean()
 
-#%%
-resultsFinal["GB"] = best_score_gb
-results_gb.sort_values(by=["score", "n_estimators"], 
-                       ascending=False, 
-                       inplace=True)
-print(results_gb)
-print("--- %s seconds ---" % (time.time() - start_time))
-
-#%%
-# Eleccion del mejor modelo
+print("Baseline: ")
+F1_Base = model_results_pred(baseline, 
+                             X_train_prep, X_test_prep, 
+                             y_train, y_test)
 
 resultsFinal = sorted(resultsFinal.items(), key=lambda m: m[1],
                       reverse=True)
 
 # Evaluacion del mejor modelo en test
 
+# Curva de aprendizaje
 m_gb.set_params(**best_params_gb)
-m_gb.fit(X_train_prep, y_train)
-F1_gb = model_results_pred(m_gb, X_train_prep, X_test_prep, y_train, y_test)
+evalset = [(X_train_prep, y_train), (X_test_prep, y_test)]
+m_gb.fit(X_train_prep, y_train, eval_set=evalset, verbose=0)
+yhat = m_gb.predict(X_test)
+score = f1_score(y_test, yhat)
+result_LC = m_gb.evals_result_
+fig = plt.figure()
+plt.plot(result_LC['training']['binary_logloss'], label='train')
+plt.plot(result_LC['valid_1']['binary_logloss'], label='test')
+plt.xlabel('Nº de estimadores')
+plt.ylabel('Función de pérdida log-loss')
+plt.legend()
+# show the plot
+plt.show()
 
-train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(
-        estimator = m_gb,
-        X = X_train_prep,
-        y = y_train,
-        cv=5,
-        n_jobs=-1,
-        train_sizes=np.linspace(0.1, 1.0, 10),
-        return_times=True
-    )
 
-train_scores_mean = np.mean(train_scores, axis=1)
-train_scores_std = np.std(train_scores, axis=1)
-test_scores_mean = np.mean(test_scores, axis=1)
-test_scores_std = np.std(test_scores, axis=1)
+E_test = model_results_pred(m_gb, X_train_prep, X_test_prep, y_train, y_test)
 
-fig, ax = plt.subplots()
 
-# Plot learning curve
-plt.grid()
-plt.fill_between(
-    train_sizes,
-    train_scores_mean - train_scores_std,
-    train_scores_mean + train_scores_std,
-    alpha=0.1,
-    color="r",
-)
-plt.fill_between(
-    train_sizes,
-    test_scores_mean - test_scores_std,
-    test_scores_mean + test_scores_std,
-    alpha=0.1,
-    color="b",
-)
-media = (train_scores_mean[-1] + test_scores_mean[-1]) / 2
-plt.plot(train_sizes, train_sizes*0 + media, "--" ,color="k")
-plt.plot(
-    train_sizes, train_scores_mean, "-", color="r", label="Training score"
-)
-plt.plot(
-    train_sizes, test_scores_mean, "-", color="b", label="Validation score"
-)
-# ax.set_ylim([0, 1])
-plt.legend(loc="best")
+
