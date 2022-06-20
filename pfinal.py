@@ -29,7 +29,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from imblearn.under_sampling import RandomUnderSampler
 from lightgbm import LGBMClassifier
-from sklearn.model_selection import learning_curve
 
 def warn(*args, **kwargs):
     pass
@@ -256,9 +255,12 @@ F1_Base = model_results_pred(baseline,
 
 print("Regresión Logística: ")
 
-modelos_lr = [LogisticRegression(C = 0.5, max_iter=1000, n_jobs=-1),
-              LogisticRegression(C = 1, max_iter=1000, n_jobs=-1),
-              LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
+modelos_lr = [LogisticRegression(penalty = 'l1', C = 0.5, max_iter=1000,  solver='liblinear', random_state=30),
+              LogisticRegression(penalty = 'l1', C = 1, max_iter=1000, solver = 'liblinear', random_state=30),
+              LogisticRegression(penalty = 'l1', C = 1.5, max_iter=1000, solver = 'liblinear', random_state=30),
+              LogisticRegression(penalty = 'l1', C = 0.5, tol = 0.001, max_iter=1000, solver='liblinear', random_state=30),
+              LogisticRegression(penalty = 'l1', C = 1, tol = 0.001, max_iter=1000, solver='liblinear', random_state=30),
+              LogisticRegression(penalty = 'l1', C = 1.5, tol = 0.001, max_iter=1000,  solver='liblinear', random_state=30)
               ]
 
 resultsFinal = dict()
@@ -267,7 +269,10 @@ import time
 start_time = time.time()
 
 results = []
-for i in modelos_lr:
+cont = 1
+best_lr = None
+best_result = 0
+for i in modelos_lr:    
     i.fit(X=X_train_prep, y=y_train) 
     cv_scores = cross_val_score(
           estimator = i, 
@@ -276,15 +281,22 @@ for i in modelos_lr:
           scoring = 'f1_macro',
           cv = 5,
           n_jobs = -1)
+    
     results.append(cv_scores.mean())
+    result = cv_scores.mean()
+    if best_result < result:
+        best_lr = i
+        best_result = result
+    results.append(result)
+    print('Resultado ' + str(cont) + 'º modelo:', result)
+    cont += 1
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
-resultsFinal["RL"] = np.max(results)
+resultsFinal["RL"] = best_result
 
-#m_lr = LogisticRegression(C = 1.5, max_iter=1000, n_jobs=-1)
-#m_lr.fit(X_train_prep, y_train)
-#F1_lr = model_results_pred(m_lr, X_train_prep, X_test_prep, y_train, y_test)
+m_lr = LogisticRegression(penalty = 'l1', C = 1.5, max_iter=1000, solver = 'liblinear', random_state=30),
+
 
 
 #%%
