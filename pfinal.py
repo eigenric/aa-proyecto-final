@@ -346,8 +346,9 @@ params = {"penalty": "l2",
           "max_iter": 1000}
 
 params_or = params.copy()
-start_time = time.time()
 
+import time
+start_time = time.time()
 # Obtención de los mejores hiperparámetros paso a paso
 m_svm = SGDClassifier(loss="hinge", n_jobs=-1, random_state=0)
 
@@ -418,7 +419,7 @@ def tuning_rf(X, y, model, params, step_nestimators=100, step_max_depth=10,
     return best_params, best_score, results_rf
 
 params = {'n_estimators': 5,
-          'max_depth': 75}
+          'max_depth': 25}
 
 start_time = time.time()
 
@@ -431,7 +432,7 @@ best_params_rf, best_score_rf, results_rf = tuning_rf(X_train_prep,
                                                       params,
                                                       step_nestimators=5,
                                                       step_max_depth=20,
-                                                      n_repeat=2,
+                                                      n_repeat=3,
                                                       cv=5)
 
 print("--- %s seconds ---" % (time.time() - start_time))
@@ -496,9 +497,9 @@ def tuning_gb(X, y, model, params, step_nestimators=100,
     
     return best_params, best_score, results_gb
 
-# Se prueban los parametros [300, 400], [3, 4]
-params = {'n_estimators': 400,
-          'max_depth': 4,
+# Se prueban los parametros [200, 300, 400], [2, 3, 4]
+params = {'n_estimators': 200,
+          'max_depth': 2,
           'learning_rate': 0.1}
 
 import time
@@ -515,7 +516,7 @@ best_params_gb, best_score_gb, results_gb = tuning_gb(X_train_prep,
                                                       step_nestimators=100,
                                                       step_max_depth=1,
                                                       step_lr=0,
-                                                      n_repeat=1,
+                                                      n_repeat=3,
                                                       cv=5)
 
 #%%
